@@ -11,6 +11,7 @@ import subprocess
 from Bio import SeqIO
 from Bio.Seq import Seq
 from kpal.klib import Profile
+from pandas import DataFrame
 from sklearn.preprocessing import StandardScaler
 
 
@@ -96,7 +97,7 @@ class KmerUtility:
 					counts = self.get_kmer_profile(record)
 					profiles[record.id] = counts
 
-		df = pd.DataFrame.from_dict(profiles, columns=self.kmers, orient='index')
+		df: DataFrame = pd.DataFrame.from_dict(profiles, columns=self.kmers, orient='index')
 		if rescale:
 			standard_scaler = StandardScaler()
 			df = df.astype('float')
@@ -109,8 +110,8 @@ class KmerUtility:
 
 class StatsUtility:
 
-	def __init__(self):
-		self.seed = 42
+	def __init__(self, seed=42):
+		self.seed = seed
 
 	@staticmethod
 	def ecdf(data):
