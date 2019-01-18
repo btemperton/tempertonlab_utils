@@ -14,6 +14,8 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from kpal.klib import Profile
 from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 def unzip_file(filename):
@@ -266,36 +268,21 @@ class StatsUtility:
 
 
 class PlotUtility:
-	seaborn_std_style = {'axes.axisbelow': True,
-	                     'axes.edgecolor': '.8',
-	                     'axes.facecolor': 'white',
-	                     'axes.grid': True,
-	                     'axes.labelcolor': '.15',
-	                     'axes.labelsize': '14',
-	                     'axes.titlesize': '16',
-	                     'axes.spines.bottom': True,
-	                     'axes.spines.left': True,
-	                     'axes.spines.right': True,
-	                     'axes.spines.top': True,
-	                     'figure.facecolor': 'white',
-	                     'font.family': ['Times New Roman'],
-	                     'font.serif': ['Times New Roman'],
-	                     'grid.color': '.8',
-	                     'grid.linestyle': '-',
-	                     'image.cmap': 'rocket',
-	                     'lines.solid_capstyle': 'round',
-	                     'patch.edgecolor': 'w',
-	                     'patch.force_edgecolor': True,
-	                     'text.color': '.15',
-	                     'xtick.bottom': False,
-	                     'xtick.color': '.15',
-	                     'xtick.direction': 'out',
-	                     'xtick.top': False,
-	                     'ytick.color': '.15',
-	                     'ytick.direction': 'out',
-	                     'ytick.left': False,
-	                     'ytick.right': False
-	                     }
+
+	@staticmethod
+	def setup_plots(type):
+		if type == 'notebook':
+			plt.rcParams['figure.figsize'] = [10, 5]
+			plt.rcParams.update({'font.size': 16})
+			sns.set_style('white', {'font.family': 'serif', 'font.serif': 'Times New Roman'})
+
+	@staticmethod
+	def get_cvd_colors():
+		"""
+		Returns an array of color vision deficiency-friendly colors (taken from https://serialmentor.com/dataviz/index.html)
+		:return:
+		"""
+		return ['#E69F00', '#56B4E9', '#009E73', '#F0E442', '#0072B2', '#D55E00', '#CC79A7', '#000000']
 
 
 class BufferedOutputHandler:
