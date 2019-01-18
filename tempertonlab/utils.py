@@ -11,7 +11,6 @@ import subprocess
 from Bio import SeqIO
 from Bio.Seq import Seq
 from kpal.klib import Profile
-from pandas import DataFrame
 from sklearn.preprocessing import StandardScaler
 
 
@@ -97,7 +96,7 @@ class KmerUtility:
 					counts = self.get_kmer_profile(record)
 					profiles[record.id] = counts
 
-		df: DataFrame = pd.DataFrame.from_dict(profiles, columns=self.kmers, orient='index')
+		df = pd.DataFrame.from_dict(profiles, columns=self.kmers, orient='index')
 		if rescale:
 			standard_scaler = StandardScaler()
 			df = df.astype('float')
@@ -185,6 +184,18 @@ class StatsUtility:
 		bs_sample = np.random.choice(data, len(data))
 		return func(bs_sample)
 
+	def draw_bs_reps(self, data, func, size=1):
+		"""Draw bootstrap replicates."""
+
+		# Initialize array of replicates: bs_replicates
+		bs_replicates = np.empty(size)
+
+		# Generate replicates
+		for i in range(size):
+			bs_replicates[i] = self.bootstrap_replicate_1d(data, func)
+
+		return bs_replicates
+
 	def generate_n_bootstrap_replicates(self, data, func, n=10000):
 		results = np.empty(n)
 		for i in range(n):
@@ -209,6 +220,48 @@ class StatsUtility:
 			bs_slope_reps[i], bs_intercept_reps[i] = np.polyfit(bs_x, bs_y, 1)
 
 		return bs_slope_reps, bs_intercept_reps
+
+	def draw_bs_pairs(self, x, y, func, size=1):
+		"""Perform pairs bootstrap for a single statistic."""
+
+		# Set up array of indices to sample from: inds
+		inds = np.arange(len(x))
+
+		# Initialize replicates: bs_replicates
+		bs_replicates = np.empty(size)
+
+		# Generate replicates
+		for i in range(size):
+			bs_inds = np.random.choice(inds, size=len(inds))
+			bs_x, bs_y = x[bs_inds], y[bs_inds]
+			bs_replicates[i] = func(bs_x, bs_y)
+
+		return bs_replicates
+
+	def shift_means(self, x, y):
+		"""
+		This function is used to shift the means of two datasets, so that they can
+		be used to test the hypothesis that the observed difference in means between two datasets
+		could happen by chance. This is different to testing whether the distributions are the same
+		(which can be done by permuting the combined dataset and dividing it up into new permuted
+		datasets.
+		:param x: dataset
+		:param y: dataset
+		:return:
+		"""
+		mean_combined = np.mean(np.concatenate((x, y)))
+		x_shifted = x - np.mean(x) + mean_combined
+		y_shifted = y - np.mean(y) + mean_combined
+		return x_shifted, y_shifted
+
+	def pearson_r(x, y):
+		"""Compute Pearson correlation coefficient between two arrays."""
+		# Compute correlation matrix: corr_mat
+		corr_mat = np.corrcoef(x, y)
+
+		# Return entry [0,1]
+		return corr_mat[0, 1]
+
 
 
 class PlotUtility:
