@@ -12,10 +12,10 @@ calculate_bootstrap_ci<-function(data, func, n=10000, as_string=FALSE){
   values = generate_bootstrap_replicate(data, func, n)
   rtnVal = quantile(values, c(.025, .5,  .975))
   if (as_string){
-    rtnVal = paste(formatC(rtnVal[2], digits=2, big.mark=','), ' (', 
-                   formatC(rtnVal[1], digits=2, big.mark=','), 
+    rtnVal = paste(formatC(rtnVal[2], big.mark=','), ' (', 
+                   formatC(rtnVal[1], big.mark=','), 
                    '-', 
-                   formatC(rtnVal[3], digits=2, big.mark=','), 
+                   formatC(rtnVal[3], big.mark=','), 
                    ', 95% CI)', sep='')
   }
   return(rtnVal)
