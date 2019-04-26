@@ -67,3 +67,9 @@ bootstrap_nhst_two_populations<-function(data_1, data_2, func, n=10000){
 bootstrap_difference<-function(data_1, data_2, func, n=1){
   generate_bootstrap_replicate(data_1, func, n) - generate_bootstrap_replicate(data_2, func, n)
 }
+
+N50<-function(x){
+  tmp <- rev(sort(x))
+  tmp2 <- cumsum(tmp) <= sum(x)/2
+  return( tmp[sum(tmp2)])
+}
