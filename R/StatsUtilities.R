@@ -16,7 +16,7 @@ calculate_bootstrap_ci<-function(data, func, n=10000, as_string=FALSE){
                    formatC(rtnVal[1], big.mark=','), 
                    '-', 
                    formatC(rtnVal[3], big.mark=','), 
-                   ', 95% CI)', sep='')
+                   ' 95% CI)', sep='')
   }
   return(rtnVal)
 }
@@ -76,8 +76,12 @@ bootstrap_difference<-function(data_1, data_2, func, n=1){
   generate_bootstrap_replicate(data_1, func, n) - generate_bootstrap_replicate(data_2, func, n)
 }
 
-N50<-function(x){
+N50<-function(x, as_string=FALSE){
   tmp <- rev(sort(x))
   tmp2 <- cumsum(tmp) <= sum(x)/2
-  return( tmp[sum(tmp2)])
+  rtnValue = tmp[sum(tmp2)]
+  if (as_string){
+    rtnValue=formatC(rtnValue, big.mark=',')
+  }
+  return(rtnValue)
 }
