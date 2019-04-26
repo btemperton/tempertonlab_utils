@@ -8,9 +8,13 @@ generate_bootstrap_replicate<-function(data, func, n=10000){
 }
 
 
-calculate_bootstrap_ci<-function(data, func, n=10000){
+calculate_bootstrap_ci<-function(data, func, n=10000, as_string=FALSE){
   values = generate_bootstrap_replicate(data, func, n)
-  quantile(values, c(.025, .5,  .975))
+  rtnVal = quantile(values, c(.025, .5,  .975))
+  if (as_string){
+    rtnVal = paste(rtnVal[2], ' (', rtnVal[1], '-', rtnVal[3], ', 95% CI)', sep='')   
+  }
+  return(rtnVal)
 }
 
 permutation_sample<-function(data_1, data_2){
