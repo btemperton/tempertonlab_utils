@@ -2,7 +2,7 @@ from unittest import TestCase
 
 from scipy import stats
 
-from tempertonlab.utils import KmerUtility
+from tempertonlab_utils import KmerUtility
 
 
 class TestCountKmers(TestCase):

@@ -1,0 +1,4 @@
+include README.rst
+include tests/*.gz
+include tests/*.fa
+include tests/*.fq

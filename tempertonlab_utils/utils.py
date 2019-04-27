@@ -1,13 +1,13 @@
 import collections
 import gzip
+import itertools
 import logging
+import subprocess
 import sys
 from logging.handlers import TimedRotatingFileHandler
 
-import itertools
 import numpy as np
 import pandas as pd
-import subprocess
 from Bio import SeqIO
 from Bio.Seq import Seq
 from kpal.klib import Profile
@@ -263,7 +263,6 @@ class StatsUtility:
 		return corr_mat[0, 1]
 
 
-
 class PlotUtility:
 	seaborn_std_style = {'axes.axisbelow': True,
 	                     'axes.edgecolor': '.8',
@@ -371,3 +370,17 @@ class LoggerUtility:
 
 	def get_logger(self):
 		return self.logger
+
+
+class GenomicsUtility:
+	def get_N50(self, lengths):
+		"""
+		Returns the N50 value for a list of lengths
+		:param lengths: a list of lengths
+		:return: The N50 value
+		"""
+		sorted_list = np.sort(lengths)
+		rev_sorted = sorted_list[::-1]
+		mask = np.cumsum(rev_sorted) <= np.sum(lengths) / 2
+		n50_id = np.sum(mask)
+		return rev_sorted[n50_id]
