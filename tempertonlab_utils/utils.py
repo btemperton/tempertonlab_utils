@@ -384,3 +384,31 @@ class GenomicsUtility:
 		mask = np.cumsum(rev_sorted) <= np.sum(lengths) / 2
 		n50_id = np.sum(mask)
 		return rev_sorted[n50_id]
+
+	def rename_fasta(self, fastas, prefix, minLength=0, maxLength=0, removeShrubbery=True):
+		"""
+		changes the names of the fasta objects and numbers them.
+		Basically an anvio function without needing anvio.
+		:param fastas: a set of fastas
+		:param prefix: the string to call the fastas
+		:param minLength: minimum length for the record to be included
+		:param maxLength: maximum length for the record to be included
+		:param removeShrubbery: Whether or not to strip descriptions and names
+		:return: a list of renamed fasta objects
+		"""
+
+		if minLength != 0 and maxLength != 0 and minLength > maxLength:
+			raise Exception('MinLength is greater than Maxlength')
+
+		count = 1
+		rtnValues = []
+		for f in fastas:
+			f.id = f'{prefix}_{count:07d}'
+			if removeShrubbery:
+				f.name = ''
+				f.description = ''
+
+			if (minLength == 0 or len(f.seq) >= minLength) and (maxLength == 0 or len(f.seq) <= maxLength):
+				rtnValues.append(f)
+				count += 1
+		return rtnValues
