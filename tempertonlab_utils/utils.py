@@ -4,7 +4,9 @@ import itertools
 import logging
 import subprocess
 import sys
+import timeit
 from logging.handlers import TimedRotatingFileHandler
+from multiprocessing import Pool, cpu_count
 
 import numpy as np
 import pandas as pd
@@ -416,7 +418,7 @@ class GenomicsUtility:
 
 class ClusterUtility:
 	def __init__(self, log_file):
-		self.my_logger = LoggerUtility('cluster_genomes', log_file).get_logger()
+		self.my_logger = LoggerUtility('cluster_genomes', log_file, level=logging.INFO).get_logger()
 
 	def get_range(self, row):
 		"""
@@ -446,6 +448,7 @@ class ClusterUtility:
 		combined_ranges_remove_overlap = set(combined_ranges)
 		# I'm not quite sure yet why I have to do group.shape[0] -1 to mimic Simon's script
 		real_cover = len(combined_ranges_remove_overlap) + group.shape[0]
+		self.my_logger.debug(f'{group.s2_name.unique()[0]} vs. {group.s1_name.unique()[0]}')
 
 		return ((group.s2_name.unique()[0],
 		         group.s1_name.unique()[0],
@@ -457,8 +460,14 @@ class ClusterUtility:
 	def parse_cover_dataframe(self, coords_df):
 		pass
 
-	def parse_coords_file(self, coords_file):
+	def applyParallel(self, dfGrouped, func):
+		with Pool(cpu_count()) as p:
+			ret_list = p.map(func, [group for name, group in dfGrouped])
+		return ret_list
+
+	def parse_coords_file(self, coords_file, multithreaded=True):
 		self.my_logger.debug(f'Parsing file: {coords_file}')
+		tic = timeit.default_timer()
 		coords_df = pd.read_csv(coords_file, sep='\t',
 		                        header=None,
 		                        names=['s1_start', 's1_end',
@@ -469,11 +478,17 @@ class ClusterUtility:
 		                               's1_name', 's2_name'])
 
 		coords_df = coords_df[coords_df.s1_name != coords_df.s2_name]
+		toc = timeit.default_timer()
+		self.my_logger.debug(f'Loading the coords file took {(toc - tic):.2f} seconds')
+		if multithreaded:
+			results = self.applyParallel(coords_df.groupby(['s1_name', 's2_name']),
+			                             self.collate_multi_alignments)
+		else:
+			results = coords_df.groupby(['s1_name', 's2_name']).apply(self.collate_multi_alignments).tolist()
 
-		results = coords_df.groupby(['s1_name', 's2_name']).apply(self.collate_multi_alignments).tolist()
 		df = pd.DataFrame(results, columns=['Subject', 'Query', 'matches', 'hit_len', 'Subject_length', 'Query_length'])
 		return df
 
-	def create_cover_dataframe(self, coords_file):
-		df = self.parse_coords_file(coords_file)
+	def create_cover_dataframe(self, coords_file, multithreaded=True):
+		df = self.parse_coords_file(coords_file, multithreaded=multithreaded)
 		return df
