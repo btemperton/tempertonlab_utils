@@ -1,3 +1,6 @@
+library(ggplot2)
+library(dplyr)
+
 bootstrap_replicate_1d<-function(data, func){
   bs_sample = sample(data, size=length(data), replace=TRUE)
   do.call(func, list(x=bs_sample))
