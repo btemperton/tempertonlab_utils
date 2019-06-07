@@ -1,0 +1,12 @@
+#!/usr/bin/env python
+
+from tempertonlab_utils import ClusterUtility
+
+log_file = 'tmp.log'
+
+coords_file = '../tests/baby.coords'
+
+cluster_utility = ClusterUtility('tmp.log')
+
+df = cluster_utility.create_cover_dataframe(coords_file)
+print(df)

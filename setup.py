@@ -31,5 +31,4 @@ setup(name='tempertonlab_utils',
       zip_safe=False,
       test_suite='nose.collector',
       tests_require=['nose'],
-      scripts=['bin/rename_fastas']
       )

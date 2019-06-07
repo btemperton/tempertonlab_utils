@@ -2,3 +2,5 @@ include README.rst
 include tests/*.gz
 include tests/*.fa
 include tests/*.fq
+include tests/*.csv
+include tests/*.coords

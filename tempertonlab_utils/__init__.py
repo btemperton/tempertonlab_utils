@@ -1,4 +1,5 @@
 from .utils import BufferedOutputHandler
+from .utils import ClusterUtility
 from .utils import GenomicsUtility
 from .utils import KmerUtility
 from .utils import LoggerUtility

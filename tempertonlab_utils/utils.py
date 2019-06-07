@@ -412,3 +412,68 @@ class GenomicsUtility:
 				rtnValues.append(f)
 				count += 1
 		return rtnValues
+
+
+class ClusterUtility:
+	def __init__(self, log_file):
+		self.my_logger = LoggerUtility('cluster_genomes', log_file).get_logger()
+
+	def get_range(self, row):
+		"""
+		Converts the start and end coordinates to a list of loci so we can
+		capture overlapping alignments between two contigs
+		:param row: The row from a query/target group
+		:return: a list of loci
+		"""
+		start = row['s2_start']
+		end = row['s2_end']
+		return list(range(start, end))
+
+	def collate_multi_alignments(self, group):
+		"""
+		Parses a group of query/target alignments and converts them into a single
+		match and coverage value
+		:param group: A group of query/target alignments
+		:return: the calculated match and real coverage
+		"""
+		# logger.debug('in collate_multi_alignments')
+		# if group.shape[0] > 2:
+		#	print(f'{group.s2_name.unique()[0]}, {group.s1_name.unique()[0]}')
+		match = np.sum(group.s2_len_aln * group.pct_id / 100)
+		# cover = np.sum(group.s2_len_aln)
+		ranges = group.apply(self.get_range, axis=1)
+		combined_ranges = [i for sublist in ranges for i in sublist]
+		combined_ranges_remove_overlap = set(combined_ranges)
+		# I'm not quite sure yet why I have to do group.shape[0] -1 to mimic Simon's script
+		real_cover = len(combined_ranges_remove_overlap) + group.shape[0]
+
+		return ((group.s2_name.unique()[0],
+		         group.s1_name.unique()[0],
+		         match,
+		         real_cover,
+		         group.s2_len.unique()[0],
+		         group.s1_len.unique()[0]))
+
+	def parse_cover_dataframe(self, coords_df):
+		pass
+
+	def parse_coords_file(self, coords_file):
+		self.my_logger.debug(f'Parsing file: {coords_file}')
+		coords_df = pd.read_csv(coords_file, sep='\t',
+		                        header=None,
+		                        names=['s1_start', 's1_end',
+		                               's2_start', 's2_end',
+		                               's1_len_aln', 's2_len_aln',
+		                               'pct_id', 's1_len', 's2_len',
+		                               'cov_1', 'cov_2',
+		                               's1_name', 's2_name'])
+
+		coords_df = coords_df[coords_df.s1_name != coords_df.s2_name]
+
+		results = coords_df.groupby(['s1_name', 's2_name']).apply(self.collate_multi_alignments).tolist()
+		df = pd.DataFrame(results, columns=['Subject', 'Query', 'matches', 'hit_len', 'Subject_length', 'Query_length'])
+		return df
+
+	def create_cover_dataframe(self, coords_file):
+		df = self.parse_coords_file(coords_file)
+		return df
