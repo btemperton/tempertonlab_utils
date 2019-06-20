@@ -17,10 +17,7 @@ template = """
 
 cd "/local/pbstmp.$${PBS_JOBID}"
 
-##This assumes a conda environment has been created with the following command:
-## conda create -y -n calculate.viral.abundance bwa samtools bowtie2 bamm pysam bbmap
-
-source activate calculate.viral.abundance
+source activate $CONDA_ENV
 
 BASECAMP=$OUTPUT_FOLDER
 SAMPLE_NAME=$SAMPLE
@@ -92,6 +89,8 @@ def main():
 	                    help='Number of threads to use')
 	parser.add_argument('--log', '-l', dest='logfile', default='map.reads.for.abundance.log')
 	parser.add_argument('--overwrite', dest='overwrite', type=bool, default=False)
+	parser.add_argument('--conda_env', dest='conda_env', default='calculate.viral.abundance')
+
 	global args
 	args = parser.parse_args()
 	global logger
@@ -122,7 +121,8 @@ def launch_job(sample, fwd, rev):
 		     'THREADS': args.threads,
 		     'OUTPUT_FOLDER': os.path.abspath(args.output_folder),
 		     'FWD_READS': fwd,
-		     'REV_READS': rev}
+		     'REV_READS': rev,
+		     'CONDA_ENV': args.conda_env}
 		t = Template(template).substitute(d)
 		logging.debug('Writing job file to {}/{}.job'.format(args.output_folder, sample))
 
