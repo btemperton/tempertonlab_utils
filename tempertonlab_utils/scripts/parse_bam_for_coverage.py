@@ -38,7 +38,6 @@ def main():
 		dfs = pool.map(parse_bams, bam_files)
 
 	final_df = pd.concat(dfs)
-	final_df.to_include = final_df.to_include.astype(int)
 
 
 	final_df.to_csv(f'{os.path.abspath(args.bamm_dir)}/contig.{args.pct_cutoff}pc.details.tsv', sep='\t', index=False)
@@ -76,10 +75,10 @@ def parse_bams(bam_file):
 	summary_df['sample'] = os.path.basename(bam_file).strip('.bam')
 	summary_df['frac_covered'] = summary_df['num_bases_covered'] / summary_df['total_bases'] *100
 	summary_df['to_include'] = summary_df['frac_covered'] >= args.pct_cutoff
-
+	summary_df['adj_tpmean'] = np.where(summary_df['to_include'], summary_df['tpmean'], 0)
 	logger.debug(f'''In total, for sample {os.path.basename(bam_file).strip(".bam")},
 	{summary_df[summary_df.to_include].shape[0]} contigs will be included''')
-	return summary_df[['sample', 'contig', 'frac_covered', 'to_include', 'tpmean']]
+	return summary_df[['sample', 'contig', 'frac_covered', 'to_include', 'tpmean', 'adj_tpmean']]
 
 
 def execute(command):
