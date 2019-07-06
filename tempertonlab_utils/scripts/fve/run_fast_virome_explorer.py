@@ -20,15 +20,31 @@ template = """
 cd "/local/pbstmp.$${PBS_JOBID}"
 
 FVE_LOCATION=$FVE_LOCATION
+FWD_READS=$FWD_READS
+REV_READS=$REV_READS
 
 source activate $CONDA_ENV
 
-COUNT=$$(zcat $FWD_READS | awk '{s++}END{print s/4}')
+if [[ $$FWD_READS == ftp* ]]
+then
+    wget -O tmp.fwd.fq.gz $$FWD_READS
+else
+    cp $$FWD_READS tmp.fwd.fq.gz
+fi
+
+if [[ $$REV_READS == ftp* ]]
+then
+    wget -O tmp.rev.fq.gz $$REV_READS
+else
+    cp $$REV_READS tmp.rev.fq.gz
+fi
+
+COUNT=$$(zcat tmp.fwd.fq.gz | awk '{s++}END{print s/4}')
 
 if [ "$$COUNT" -ge $SUBSAMPLE ]; then
 
-	seqtk sample -s 42 $FWD_READS $SUBSAMPLE > fwd.fq
-	seqtk sample -s 42 $REV_READS $SUBSAMPLE > rev.fq
+	seqtk sample -s 42 tmp.fwd.fq.gz $SUBSAMPLE > fwd.fq
+	seqtk sample -s 42 tmp.rev.fq.gz $SUBSAMPLE > rev.fq
 
 	java -Xmx108G -cp $$FVE_LOCATION/bin FastViromeExplorer \
 	-1 fwd.fq \
@@ -92,8 +108,8 @@ def launch_job(sample, fwd, rev):
 	if not os.path.isfile('{}/{}.fve.sorted.abundance.tsv'.format(args.output_folder, sample)) or args.overwrite:
 		d = {'SAMPLE': sample,
 			 'OUTPUT_FOLDER': os.path.abspath(args.output_folder),
-			 'FWD_READS': os.path.abspath(fwd),
-			 'REV_READS': os.path.abspath(rev),
+			 'FWD_READS': fwd,
+			 'REV_READS': rev,
 			 'FVE_LOCATION': os.path.abspath(args.fve_loc),
 			 'MIN_RATIO' : args.min_ratio,
 			 'MIN_COVERAGE': args.min_coverage,
