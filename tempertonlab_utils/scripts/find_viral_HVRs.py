@@ -89,7 +89,7 @@ def main():
 	                    help='Output folder where the files will be created (will be generated if it doesn\'t exist)')
 	parser.add_argument('--threads', '-t', dest='threads', default=16, type=int,
 	                    help='Number of threads to use')
-	parser.add_argument('--log', '-l', dest='logfile', default='map.reads.for.abundance.log')
+	parser.add_argument('--log', '-l', dest='logfile', default='find_viral_HVRs.log')
 	parser.add_argument('--overwrite', dest='overwrite', type=bool, default=False)
 	parser.add_argument('--conda_env', dest='conda_env', default='calculate.viral.abundance')
 

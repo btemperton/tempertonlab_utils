@@ -5,6 +5,8 @@
 # Compiled python modules.
 *.pyc
 
+tempertonlab_utils/.idea/*
+
 # Setuptools distribution folder.
 /dist/
 
