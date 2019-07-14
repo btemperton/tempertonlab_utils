@@ -1,11 +1,15 @@
 import argparse
 import logging
 import os
+import warnings
 from multiprocessing import Pool, cpu_count
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from matplotlib.collections import PatchCollection
+
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 
 def main():
@@ -43,29 +47,60 @@ def main():
 	logger.addHandler(fileHandler)
 	logger.addHandler(consoleHandler)
 
-	create_output_dir()
-	plt.style.use('seaborn-whitegrid')
+	create_output_dir(args.output_folder)
+	plt.style.use('seaborn-ticks')
 
 	df = pd.read_csv(args.coverage_file, sep='\t', header=None, names=['sample', 'contig', 'loc', 'depth'])
 	results = applyParallel(df.groupby(['sample', 'contig']), find_HVRs)
 	#results = df.groupby(['sample', 'contig']).apply(find_HVRs)
 	#results.reset_index(inplace=True, drop=True)
+
 	final_results = pd.concat(results)
 	final_results.to_csv(f'{args.output_folder}/hvrs.tsv', sep='\t', index=False)
 
 
+def plot_coverage(sliding_coverage, name, sample, hvr_df):
+	fig, ax = plt.subplots(figsize=(10, 4))
+	ax.fill_between(sliding_coverage[0,], np.sqrt(sliding_coverage[1,]), color='green')
+
+	boxes = [get_hvr_rect(start, width,
+	                       np.max(sliding_coverage[1,]))
+	          for start, width in zip(hvr_df['hvr_start'], hvr_df['hvr_length'])]
+	pc = PatchCollection(boxes,facecolor='lightgrey', alpha=0.6)
+	ax.add_collection(pc)
+	ax.set(title=f"Coverage of {name} in {sample}",
+	       ylabel=r'$\sqrt{Coverage}$',
+	       xlabel='Locus (bp)')
+
+
+
+	fig.tight_layout()
+	create_output_dir(f'{args.output_folder}/{name}')
+	plt.savefig(f'{args.output_folder}/{name}/{sample}.png', dpi=300)
+
+def get_hvr_rect(start, width, height):
+	rectangle = plt.Rectangle((start, 0), width, height)
+	return rectangle
+
+
 def find_HVRs(group):
 	results = []
-	logging.info(f"processing {group['sample'].unique()[0]} in sample {group['contig'].unique()[0]}")
 	sliding_coverage = sliding_coverage_window(group['depth'],
 	                                           args.sliding_window_length,
 	                                           args.hvr_threshold,
 	                                           args.sliding_window_step)
+
+	contig_name = group['contig'].unique()[0]
+	sample_name = group['sample'].unique()[0]
+
+
+
+
 	coords = identify_island_coords(sliding_coverage[2,])
 	for i in range(coords.shape[0]):
 		if coords[i,1] - coords[i,0] +1 >= args.hvr_min_len:
-			results.append((group['sample'].unique()[0],
-			                group['contig'].unique()[0],
+			results.append((sample_name,
+			                contig_name,
 			                coords[i,0],
 			                coords[i,1],
 			                coords[i,1] - coords[i,0]+1))
@@ -73,7 +108,10 @@ def find_HVRs(group):
 	df = pd.DataFrame(results, columns=['sample', 'contig', 'hvr_start', 'hvr_end', 'hvr_length'])
 	df = df[df['hvr_start'] >= args.sliding_window_length]
 	df = df[df['hvr_end'] <= group['depth'].size - args.sliding_window_length]
-	logging.info(f"processed {group['sample'].unique()[0]} in sample {group['contig'].unique()[0]} and found {df.shape[0]} HVRs")
+
+	plot_coverage(sliding_coverage, contig_name, sample_name, df)
+
+	logging.info(f"processed {contig_name} in sample {sample_name} and found {df.shape[0]} HVRs")
 	return df
 
 
@@ -83,9 +121,9 @@ def applyParallel(dfGrouped, func):
 	return ret_list
 
 
-def create_output_dir():
+def create_output_dir(directory_name):
 	try:
-		os.mkdir(args.output_folder)
+		os.mkdir(directory_name)
 		logger.debug('Created output folder at {}'.format(args.output_folder))
 	except OSError:
 		logger.debug('Output folder at {} already exists'.format(args.output_folder))
@@ -142,11 +180,14 @@ def identify_island_coords(a):
     a_ext = np.concatenate(( [0], a, [0] ))
     idx = np.flatnonzero(a_ext[1:] != a_ext[:-1])
     idx = idx.reshape((int(len(idx)/2), 2)).T
-    idx[1,] = idx[1,] + (int(args.sliding_window_length/2))
-    idx[0,] = idx[0,] + (int(args.sliding_window_length/2))
+    #We need to do this bit because we're taking medians.
+    #idx[1,] = idx[1,] + (int(args.sliding_window_length/2))
+    #idx[0,] = idx[0,] - (int(args.sliding_window_length/2))
 
 
     return idx.T
+
+
 
 if __name__ == "__main__":
 	main()
