@@ -70,13 +70,15 @@ def main():
 def annotate_genomes(filename):
 	logger.info('Annotating genomes')
 
-	genes_df = get_genes_with_prodigal(filename, f'{args.output_folder}/prots.fa')
+	prodigal_genes_df = get_genes_with_prodigal(filename, f'{args.output_folder}/prots.fa')
+
+	mga_genes_df = get_genes_with_mga(filename, f'{args.output_folder}/mga.tsv')
 
 	ribosomal_df = get_ribosomal(filename, f'{args.output_folder}/ribosomal.gff')
 
 	hmmscan_results_df = runHMMScan(f'{args.output_folder}/prots.fa', f'{args.output_folder}/pvog.tbl')
 
-	final_df = genes_df.merge(hmmscan_results_df, how='left', on='protein_id')
+	final_df = prodigal_genes_df.merge(hmmscan_results_df, how='left', on='protein_id')
 	return final_df
 
 def create_trace_plots(annotations_df, results):
@@ -123,7 +125,7 @@ def create_trace_plots(annotations_df, results):
 def get_annotation_color(vog):
 	color = 'darkgrey'
 	if vog is not np.nan:
-		color = 'blueviolet'
+		color = '#56B4E9'
 	return color
 
 class Trace:
@@ -211,10 +213,6 @@ def runHMMScan(infile, outfile):
 	return hmm_results
 
 
-
-
-
-
 def plot_coverage(sliding_coverage, name, sample, hvr_df):
 	fig, ax = plt.subplots(figsize=(10, 4))
 	ax.fill_between(sliding_coverage[0,], np.sqrt(sliding_coverage[1,]), color='green')
@@ -227,9 +225,6 @@ def plot_coverage(sliding_coverage, name, sample, hvr_df):
 	ax.set(title=f"Coverage of {name} in {sample}",
 	       ylabel=r'$\sqrt{Coverage}$',
 	       xlabel='Locus (bp)')
-
-
-
 	fig.tight_layout()
 	create_output_dir(f'{args.output_folder}/{name}')
 	plt.savefig(f'{args.output_folder}/{name}/{sample}.png', dpi=300)
@@ -344,6 +339,48 @@ def execute(command):
 	(stdout, stderr) = process.communicate()
 
 	return stdout, stderr
+
+
+def get_genes_with_mga(input_file, output_file):
+	if os.path.isfile(output_file):
+		logger.info(f'MGA output file {output_file} already exists')
+		df = pd.read_csv(output_file, sep='\t')
+	else:
+		cmd = f'mga {input_file} -m'
+		stdout, stderr = execute(cmd)
+		df = parse_mga_output(stdout.decode('utf-8'))
+		df.to_csv(output_file, sep='\t', index=False)
+	return df
+
+
+def parse_mga_output(output):
+	results = []
+	contig = ''
+	contig_rgx = re.compile('# (\S+)')
+	frame_map = {'+' : 1, '-': -1}
+	lines = iter(output.split('\n'))
+	for line in lines:
+		if line.startswith('#'):
+			m = contig_rgx.search(line)
+			if m:
+				contig = m.group(1)
+				next(lines, None)
+				next(lines, None)
+				continue
+		bits = line.split('\t')
+		try:
+			results.append((contig, bits[0], bits[1], bits[2], frame_map[bits[3]]))
+		except IndexError:
+			pass
+
+	df = pd.DataFrame(results, columns=['contig', 'gene_id', 'start', 'end', 'frame'])
+	return df
+
+
+
+
+
+
 
 
 if __name__ == "__main__":

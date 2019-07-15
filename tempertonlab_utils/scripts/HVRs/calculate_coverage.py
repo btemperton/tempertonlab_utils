@@ -17,7 +17,7 @@ template = """
 
 cd "/local/pbstmp.$${PBS_JOBID}"
 
-source activate $CONDA_ENV
+conda activate $CONDA_ENV
 
 BASECAMP=$OUTPUT_FOLDER
 SAMPLE_NAME=$SAMPLE
