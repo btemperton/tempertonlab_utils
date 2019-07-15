@@ -42,8 +42,6 @@ def main():
 	global logger
 	logger = logging.getLogger()
 
-	global traces
-	traces = dict()
 	logger.setLevel(logging.INFO)
 	formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 	fileHandler = logging.FileHandler(args.logfile)
@@ -61,19 +59,94 @@ def main():
 	df = pd.read_csv(args.coverage_file, sep='\t', header=None, names=['sample', 'contig', 'loc', 'depth'])
 	results = applyParallel(df.groupby(['sample', 'contig']), find_HVRs)
 
-	final_results = pd.concat(results)
+	final_results = pd.concat([ti.hvrs for ti in results])
 	final_results.to_csv(f'{args.output_folder}/hvrs.tsv', sep='\t', index=False)
 
-	anotate_genomes(args.fasta_file)
+	annotations_df = annotate_genomes(args.fasta_file)
 
-def anotate_genomes(filename):
+	create_trace_plots(annotations_df, results)
+
+
+def annotate_genomes(filename):
 	logger.info('Annotating genomes')
 
-	genes_df = get_genes_with_prodigal(args.fasta_file, f'{args.output_folder}/prots.fa')
+	genes_df = get_genes_with_prodigal(filename, f'{args.output_folder}/prots.fa')
 
-	ribosomal_df = get_ribosomal(args.fasta_file, f'{args.output_folder}/ribosomal.gff')
+	ribosomal_df = get_ribosomal(filename, f'{args.output_folder}/ribosomal.gff')
 
 	hmmscan_results_df = runHMMScan(f'{args.output_folder}/prots.fa', f'{args.output_folder}/pvog.tbl')
+
+	final_df = genes_df.merge(hmmscan_results_df, how='left', on='protein_id')
+	return final_df
+
+def create_trace_plots(annotations_df, results):
+	traces = {}
+	for ti in results:
+		try:
+			trace = traces[ti.contig_name]
+		except KeyError:
+			trace = Trace(ti.coords)
+			traces[ti.contig_name] = trace
+		trace.add_sample(ti.sample_name, ti.coverage)
+
+	for k,v in traces.items():
+		gridsize = (3, 1)
+		fig = plt.figure(figsize=(10, 4))
+		ax1 = plt.subplot2grid(gridsize, (1, 0), colspan=1, rowspan=2)
+		ax2 = plt.subplot2grid(gridsize, (0, 0))
+		highest_coverage = 0
+		for i in v.get_all_coverages():
+			ax1.plot(v.coords, np.sqrt(i), color='darkgray', linewidth=1)
+			highest_coverage = np.max([highest_coverage, np.max(np.sqrt(i))])
+
+		ax1.set_xlim([0, np.max(v.coords)])
+		ax1.set_ylim([0, highest_coverage])
+
+		ax1.set(
+		        ylabel=r'$\sqrt{Coverage}$',
+		        xlabel='Locus (bp)')
+
+		sub_df = annotations_df[annotations_df['contig']==k]
+
+		boxes = [plt.Rectangle((start, frame), end - start, 0.8, fc=get_annotation_color(vog))
+		         for start, end, frame, vog in zip(sub_df['start'], sub_df['end'], sub_df['frame'], sub_df['VOG'])]
+
+		pc = PatchCollection(boxes, match_original=True)
+		ax2.add_collection(pc)
+		ax2.set_xlim([0, np.max(v.coords)])
+		ax2.set_ylim([-3.5, 3.5])
+		ax2.axis('off')
+		fig.tight_layout()
+		create_output_dir(f'{args.output_folder}/trace_plots')
+		plt.savefig(f'{args.output_folder}/trace_plots/{k}.trace.png', dpi=300)
+
+def get_annotation_color(vog):
+	color = 'darkgrey'
+	if vog is not np.nan:
+		color = 'blueviolet'
+	return color
+
+class Trace:
+	def __init__(self, coords):
+		self.coords = coords
+		self.sample_store = {}
+
+	def add_sample(self, sample_name, coverages):
+		self.sample_store[sample_name] = coverages
+
+	def get_sample_coverage(self, sample_name):
+		return self.sample_store[sample_name]
+
+	def get_all_coverages(self):
+		return self.sample_store.values()
+
+class TraceItem:
+	def __init__(self, contig_name, sample_name, coords, coverage, hvrs):
+		self.contig_name = contig_name
+		self.sample_name = sample_name
+		self.coords = coords
+		self.coverage = coverage
+		self.hvrs = hvrs
 
 
 def get_ribosomal(infile, outfile):
@@ -126,7 +199,7 @@ def get_genes_with_prodigal(infile, outfile):
 
 def runHMMScan(infile, outfile):
 	if os.path.isfile(outfile):
-		logger.info(f'PVOG output file {args.output_folder}pvog.tbl already exists')
+		logger.info(f'PVOG output file {args.output_folder}/pvog.tbl already exists')
 	else:
 		logger.info('Running HMM search against pVOG')
 		cmd = f'hmmsearch --tblout {outfile} --notextw -E 1e-5 --cpu {args.threads} {args.pvog_db} {infile}'
@@ -134,7 +207,7 @@ def runHMMScan(infile, outfile):
 		logger.info(stderr.decode('utf-8'))
 		logger.debug(stdout.decode('utf-8'))
 
-	hmm_results = pd.read_csv(outfile, sep='\s+', skiprows=3, comment='#',usecols=[0,2])
+	hmm_results = pd.read_csv(outfile, sep='\s+', skiprows=3, comment='#',usecols=[0,2], header=None, names=['protein_id', 'VOG'])
 	return hmm_results
 
 
@@ -176,10 +249,6 @@ def find_HVRs(group):
 	contig_name = group['contig'].unique()[0]
 	sample_name = group['sample'].unique()[0]
 
-	store_trace(contig_name, sample_name, sliding_coverage)
-
-
-
 	coords = identify_island_coords(sliding_coverage[2,])
 	for i in range(coords.shape[0]):
 		if coords[i,1] - coords[i,0] +1 >= args.hvr_min_len:
@@ -196,15 +265,9 @@ def find_HVRs(group):
 	plot_coverage(sliding_coverage, contig_name, sample_name, df)
 
 	logging.info(f"processed {contig_name} in sample {sample_name} and found {df.shape[0]} HVRs")
-	return df
+	return TraceItem(contig_name, sample_name, sliding_coverage[0,], sliding_coverage[1,], df)
 
-def store_trace(contig_name, sample_name, sliding_coverage):
-	try:
-		traces[contig_name][sample_name] = sliding_coverage[1,]
-	except:
-		traces[contig_name] = dict()
-		traces[contig_name]['coords'] = sliding_coverage[0,]
-		traces[contig_name][sample_name] = sliding_coverage[1,]
+
 
 
 def applyParallel(dfGrouped, func):
