@@ -1,12 +1,15 @@
 import argparse
 import logging
 import os
+import re
+import subprocess
 import warnings
 from multiprocessing import Pool, cpu_count
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from Bio import SeqIO
 from matplotlib.collections import PatchCollection
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -26,20 +29,25 @@ def main():
 	                    help='The length of the sliding window to use')
 	parser.add_argument('--sliding_window_step_size', type=int, dest='sliding_window_step', default=1,
 	                    help='The length of the sliding window step to use')
+	parser.add_argument('--fasta', required=True, dest='fasta_file')
 
 	parser.add_argument('--threads', '-t', dest='threads', default=16, type=int,
 	                    help='Number of threads to use')
 	parser.add_argument('--log', '-l', dest='logfile', default='find_viral_HVRs.log')
 	parser.add_argument('--overwrite', dest='overwrite', type=bool, default=False)
 	parser.add_argument('--conda_env', dest='conda_env', default='calculate.viral.abundance')
+	parser.add_argument('--pvog', dest='pvog_db', default='../../dbs/pvog.hmm', help='The location of the pVOG HMM database for prokka to use')
 	global args
 	args = parser.parse_args()
 	global logger
 	logger = logging.getLogger()
-	logger.setLevel(logging.DEBUG)
+
+	global traces
+	traces = dict()
+	logger.setLevel(logging.INFO)
 	formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 	fileHandler = logging.FileHandler(args.logfile)
-	fileHandler.setLevel(logging.DEBUG)
+	fileHandler.setLevel(logging.INFO)
 	fileHandler.setFormatter(formatter)
 	consoleHandler = logging.StreamHandler()
 	consoleHandler.setLevel(logging.DEBUG)
@@ -52,11 +60,86 @@ def main():
 
 	df = pd.read_csv(args.coverage_file, sep='\t', header=None, names=['sample', 'contig', 'loc', 'depth'])
 	results = applyParallel(df.groupby(['sample', 'contig']), find_HVRs)
-	#results = df.groupby(['sample', 'contig']).apply(find_HVRs)
-	#results.reset_index(inplace=True, drop=True)
 
 	final_results = pd.concat(results)
 	final_results.to_csv(f'{args.output_folder}/hvrs.tsv', sep='\t', index=False)
+
+	anotate_genomes(args.fasta_file)
+
+def anotate_genomes(filename):
+	logger.info('Annotating genomes')
+
+	genes_df = get_genes_with_prodigal(args.fasta_file, f'{args.output_folder}/prots.fa')
+
+	ribosomal_df = get_ribosomal(args.fasta_file, f'{args.output_folder}/ribosomal.gff')
+
+	hmmscan_results_df = runHMMScan(f'{args.output_folder}/prots.fa', f'{args.output_folder}/pvog.tbl')
+
+
+def get_ribosomal(infile, outfile):
+	if os.path.isfile(outfile):
+		logger.info(f'ribosomal file {outfile} already exists')
+	else:
+		logger.info('Calling barrnap')
+		cmd = f'barrnap --threads {args.threads} {infile}'
+		stdout, stderr = execute(cmd)
+		logger.info(stderr.decode('utf-8'))
+		logger.debug(stdout.decode('utf-8'))
+		with open(outfile, 'w') as handle:
+			handle.write(stdout.decode('utf-8'))
+
+
+
+def get_genes_with_prodigal(infile, outfile):
+	if os.path.isfile(outfile):
+		logger.info(f'Protein file {outfile} already exists')
+	else:
+		logger.info('Calling genes with prodigal')
+		cmd = f"""prodigal -a {outfile} -f gff -i {infile} -m -p meta -q"""
+		stdout, stderr = execute(cmd)
+		logger.info(stderr.decode('utf-8'))
+		logger.debug(stdout.decode('utf-8'))
+
+	if os.path.isfile(f'{args.output_folder}/genes_df.tsv'):
+		gene_df = pd.read_csv(f'{args.output_folder}/genes_df.tsv', sep='\t')
+	else:
+		rgx = re.compile('((\S+)_(\S+))\s+#\s+(\d+)\s+#\s+(\d+)\s+#\s+([0-9\-]+).*')
+		protein_results = []
+		cleaned_proteins = []
+		with open(outfile, 'r') as handle:
+			for record in SeqIO.parse(handle, 'fasta'):
+				m = rgx.search(record.description)
+				if m:
+					protein_results.append((m.group(2), m.group(1), m.group(4), m.group(5), m.group(6), 'prodigal'))
+				record.name = ''
+				record.description = ''
+				record.seq = record.seq[:-1]
+				cleaned_proteins.append(record)
+		SeqIO.write(cleaned_proteins, outfile, 'fasta')
+		gene_df = pd.DataFrame(protein_results, columns=['contig', 'protein_id', 'start', 'end', 'frame', 'method'])
+		gene_df.to_csv(f'{args.output_folder}/genes_df.tsv', sep='\t', index=False)
+	return gene_df
+
+
+
+
+
+def runHMMScan(infile, outfile):
+	if os.path.isfile(outfile):
+		logger.info(f'PVOG output file {args.output_folder}pvog.tbl already exists')
+	else:
+		logger.info('Running HMM search against pVOG')
+		cmd = f'hmmsearch --tblout {outfile} --notextw -E 1e-5 --cpu {args.threads} {args.pvog_db} {infile}'
+		stdout, stderr = execute(cmd)
+		logger.info(stderr.decode('utf-8'))
+		logger.debug(stdout.decode('utf-8'))
+
+	hmm_results = pd.read_csv(outfile, sep='\s+', skiprows=3, comment='#',usecols=[0,2])
+	return hmm_results
+
+
+
+
 
 
 def plot_coverage(sliding_coverage, name, sample, hvr_df):
@@ -93,6 +176,7 @@ def find_HVRs(group):
 	contig_name = group['contig'].unique()[0]
 	sample_name = group['sample'].unique()[0]
 
+	store_trace(contig_name, sample_name, sliding_coverage)
 
 
 
@@ -113,6 +197,14 @@ def find_HVRs(group):
 
 	logging.info(f"processed {contig_name} in sample {sample_name} and found {df.shape[0]} HVRs")
 	return df
+
+def store_trace(contig_name, sample_name, sliding_coverage):
+	try:
+		traces[contig_name][sample_name] = sliding_coverage[1,]
+	except:
+		traces[contig_name] = dict()
+		traces[contig_name]['coords'] = sliding_coverage[0,]
+		traces[contig_name][sample_name] = sliding_coverage[1,]
 
 
 def applyParallel(dfGrouped, func):
@@ -180,13 +272,15 @@ def identify_island_coords(a):
     a_ext = np.concatenate(( [0], a, [0] ))
     idx = np.flatnonzero(a_ext[1:] != a_ext[:-1])
     idx = idx.reshape((int(len(idx)/2), 2)).T
-    #We need to do this bit because we're taking medians.
-    #idx[1,] = idx[1,] + (int(args.sliding_window_length/2))
-    #idx[0,] = idx[0,] - (int(args.sliding_window_length/2))
-
-
     return idx.T
 
+def execute(command):
+	logger.info('\nExecuting {}'.format(command))
+	process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+	                           shell=True)
+	(stdout, stderr) = process.communicate()
+
+	return stdout, stderr
 
 
 if __name__ == "__main__":
