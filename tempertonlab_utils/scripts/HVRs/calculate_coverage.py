@@ -10,7 +10,7 @@ template = """
 #PBS -d . # set working directory to .
 #PBS -q pq # submit to the pq (max 96 cores)
 #PBS -n coverage.$SAMPLE
-#PBS -l walltime=08:00:00
+#PBS -l walltime=24:00:00
 #PBS -A Research_Project-172179 # research project to submit under.
 #PBS -l nodes=1:ppn=$THREADS # or nodes=number of nodes required. ppn=number of processors per node
 #PBS -j oe
@@ -69,11 +69,24 @@ samtools view --threads $$THREADS -F 4 -bS -o mapping.bam mapping.sam
 samtools sort --threads $$THREADS -o mapping.sorted.bam mapping.bam
 samtools index -@ $$THREADS mapping.sorted.bam
 
-samtools depth -aa -m 0 mapping.sorted.bam > coverage.txt
+bamm filter -b mapping.sorted.bam --percentage_id 0.98 --length 50 
+ 
+
+samtools depth -aa -m 0 mapping.sorted_filtered.bam > coverage.txt
 
 sed -i "s/^/$$SAMPLE_NAME\t/g" coverage.txt
 
 mv coverage.txt $$OUTPUT_DIR/$$SAMPLE_NAME.coverage.txt
+
+
+python $RPKG_SCRIPT \
+--bam mapping.sorted_filtered.bam \
+--output $$OUTPUT_DIR/$$SAMPLE_NAME.rpkg.txt \
+--fwd fwd.fq.gz \
+--rev rev.fq.gz \
+--sample $$SAMPLE_NAME \
+--log $$OUTPUT_DIR/$$SAMPLE_NAME.rpkg.log \
+
 
 """
 
@@ -92,6 +105,7 @@ def main():
 	parser.add_argument('--log', '-l', dest='logfile', default='find_viral_HVRs.log')
 	parser.add_argument('--overwrite', dest='overwrite', type=bool, default=False)
 	parser.add_argument('--conda_env', dest='conda_env', default='calculate.viral.abundance')
+	parser.add_argument('--rpkg_script', dest='rpkg_script', required=True)
 
 	global args
 	args = parser.parse_args()
@@ -127,7 +141,8 @@ def launch_job(sample, fwd, rev):
 		     'OUTPUT_FOLDER': os.path.abspath(args.output_folder),
 		     'FWD_READS': fwd,
 		     'REV_READS': rev,
-		     'CONDA_ENV': args.conda_env}
+		     'CONDA_ENV': args.conda_env,
+		     'RPKG_SCRIPT': args.rpkg_script}
 		t = Template(template).substitute(d)
 		logging.debug('Writing job file to {}/{}.job'.format(args.output_folder, sample))
 

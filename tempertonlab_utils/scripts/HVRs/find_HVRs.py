@@ -25,6 +25,8 @@ def main():
 	                    help='The fraction of median coverage that defines an HVR')
 	parser.add_argument('--hvr_min_length', type=int, dest='hvr_min_len', default=500,
 	                    help='The minimum length of an HVR')
+	parser.add_argument('--min_coverage', type=float, dest='min_coverage', default=5,
+	                    help='The minimum coverage of a contig for HVRs to be considered')
 	parser.add_argument('--sliding_window_length', type=int, dest='sliding_window_length', default=500,
 	                    help='The length of the sliding window to use')
 	parser.add_argument('--sliding_window_step_size', type=int, dest='sliding_window_step', default=1,
@@ -110,7 +112,7 @@ def create_trace_plots(annotations_df, results):
 
 		sub_df = annotations_df[annotations_df['contig']==k]
 
-		boxes = [plt.Rectangle((start, frame), end - start, 0.8, fc=get_annotation_color(vog))
+		boxes = [plt.Rectangle((int(start), frame), int(end) - int(start), 0.8, fc=get_annotation_color(vog))
 		         for start, end, frame, vog in zip(sub_df['start'], sub_df['end'], sub_df['frame'], sub_df['VOG'])]
 
 		pc = PatchCollection(boxes, match_original=True)
@@ -244,9 +246,13 @@ def find_HVRs(group):
 	contig_name = group['contig'].unique()[0]
 	sample_name = group['sample'].unique()[0]
 
+	enough_coverage = np.median(group['depth']) >= args.min_coverage
+	if not enough_coverage:
+		logger.info(f'Contig {contig_name} does not have enough coverage in sample {sample_name} to be considered for HVRs')
+
 	coords = identify_island_coords(sliding_coverage[2,])
 	for i in range(coords.shape[0]):
-		if coords[i,1] - coords[i,0] +1 >= args.hvr_min_len:
+		if coords[i,1] - coords[i,0] +1 >= args.hvr_min_len and enough_coverage:
 			results.append((sample_name,
 			                contig_name,
 			                coords[i,0],
@@ -350,6 +356,10 @@ def get_genes_with_mga(input_file, output_file):
 		stdout, stderr = execute(cmd)
 		df = parse_mga_output(stdout.decode('utf-8'))
 		df.to_csv(output_file, sep='\t', index=False)
+
+		contigs = SeqIO.index(input_file, 'fasta')
+		proteins = []
+
 	return df
 
 
