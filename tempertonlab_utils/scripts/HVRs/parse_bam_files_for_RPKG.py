@@ -15,6 +15,7 @@ def main():
 	parser.add_argument('--fwd', '-1', dest='fwd_reads', required=True)
 	parser.add_argument('--rev', '-2', dest='rev_reads', required=True)
 	parser.add_argument('--sample', '-s', dest='sample_name', required=True)
+	parser.add_argument('--cutoff', '-c', dest='cutoff', required=True)
 	parser.add_argument('--log', '-l', dest='logfile', default='parse.bam.for.RPKG.log')
 
 	global args
@@ -37,6 +38,7 @@ def main():
 	read_count, gbp = count_reads()
 	df = parse_bam_for_RPKG()
 	df['sample'] = args.sample_name
+	df['cutoff'] = args.cutoff
 	df['read_count_million'] = read_count
 	df['sample_gbp'] = gbp
 	df['RPKG'] = df['read_count'] / df['length_kbp'] / gbp

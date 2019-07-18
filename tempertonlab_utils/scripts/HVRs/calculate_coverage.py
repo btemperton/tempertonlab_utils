@@ -69,24 +69,25 @@ samtools view --threads $$THREADS -F 4 -bS -o mapping.bam mapping.sam
 samtools sort --threads $$THREADS -o mapping.sorted.bam mapping.bam
 samtools index -@ $$THREADS mapping.sorted.bam
 
-bamm filter -b mapping.sorted.bam --percentage_id 0.98 --length 50 
- 
+for i in $LIST_OF_CUTOFFS
+do
 
+bamm filter -b mapping.sorted.bam --percentage_id $$i --length 50 
 samtools depth -aa -m 0 mapping.sorted_filtered.bam > coverage.txt
-
-sed -i "s/^/$$SAMPLE_NAME\t/g" coverage.txt
-
-mv coverage.txt $$OUTPUT_DIR/$$SAMPLE_NAME.coverage.txt
+sed -i "s/^/$$i\\t/g" coverage.txt
+sed -i "s/^/$$SAMPLE_NAME\\t/g" coverage.txt
+mv coverage.txt $$OUTPUT_DIR/$$SAMPLE_NAME.coverage.$$i.cutoff.txt
 
 
 python $RPKG_SCRIPT \
 --bam mapping.sorted_filtered.bam \
---output $$OUTPUT_DIR/$$SAMPLE_NAME.rpkg.txt \
+--output $$OUTPUT_DIR/$$SAMPLE_NAME.rpkg.$$i.cutoff.txt \
 --fwd fwd.fq.gz \
 --rev rev.fq.gz \
 --sample $$SAMPLE_NAME \
---log $$OUTPUT_DIR/$$SAMPLE_NAME.rpkg.log \
-
+--cutoff $$i \
+--log $$OUTPUT_DIR/$$SAMPLE_NAME.rpkg.$$i.cutoff.log
+done
 
 """
 
@@ -103,9 +104,12 @@ def main():
 	parser.add_argument('--threads', '-t', dest='threads', default=16, type=int,
 	                    help='Number of threads to use')
 	parser.add_argument('--log', '-l', dest='logfile', default='find_viral_HVRs.log')
-	parser.add_argument('--overwrite', dest='overwrite', type=bool, default=False)
+	parser.add_argument('--overwrite', dest='overwrite', action='store_true')
 	parser.add_argument('--conda_env', dest='conda_env', default='calculate.viral.abundance')
 	parser.add_argument('--rpkg_script', dest='rpkg_script', required=True)
+	parser.add_argument('--dry_run', dest='dry_run', action='store_true')
+	parser.add_argument('--pct_id_cutoffs', dest='cutoffs', nargs='+', type=float, default=[0.5, 0.75, 0.8, 0.9, 0.95, 0.98],
+	                    help='The cutoff for percentage id of reads to map to the genomes')
 
 	global args
 	args = parser.parse_args()
@@ -142,16 +146,21 @@ def launch_job(sample, fwd, rev):
 		     'FWD_READS': fwd,
 		     'REV_READS': rev,
 		     'CONDA_ENV': args.conda_env,
-		     'RPKG_SCRIPT': args.rpkg_script}
+		     'RPKG_SCRIPT': args.rpkg_script,
+		     'LIST_OF_CUTOFFS': " ".join([str(x) for x in args.cutoffs])}
 		t = Template(template).substitute(d)
 		logging.debug('Writing job file to {}/{}.job'.format(args.output_folder, sample))
 
 		with open('{}/{}.job'.format(args.output_folder, sample), 'w') as handle:
 			handle.write(t)
-		cmd = 'qsub {}/{}.job'.format(args.output_folder, sample)
-		stdout, stderr = execute(cmd)
-		logger.info(stderr)
-		logger.debug(stdout)
+
+		if not args.dry_run:
+			cmd = 'qsub {}/{}.job'.format(args.output_folder, sample)
+			stdout, stderr = execute(cmd)
+			logger.info(stderr)
+			logger.debug(stdout)
+		else:
+			logger.info('Dry run only - will create the job for {}, but not launch it'.format(sample))
 	else:
 		logger.debug('No need to launch job for {} as output file already exists'.format(sample))
 
