@@ -1,13 +1,16 @@
 library(ggplot2)
 library(dplyr)
 
-bootstrap_replicate_1d<-function(data, func){
-  bs_sample = sample(data, size=length(data), replace=TRUE)
+bootstrap_replicate_1d<-function(data, func, size=NULL){
+  if (is.null(size)){
+    size = length(data)
+  }
+  bs_sample = sample(data, size=size, replace=TRUE)
   do.call(func, list(x=bs_sample))
 }
 
-generate_bootstrap_replicate<-function(data, func, n=10000){
-  replicate(n, do.call(bootstrap_replicate_1d, list(data=data, func=func)))
+generate_bootstrap_replicate<-function(data, func, n=10000, size=NULL){
+  replicate(n, do.call(bootstrap_replicate_1d, list(data=data, func=func, size=size)))
 }
 
 
