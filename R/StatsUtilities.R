@@ -14,8 +14,8 @@ generate_bootstrap_replicate<-function(data, func, n=10000, size=NULL){
 }
 
 
-calculate_bootstrap_ci<-function(data, func, n=10000, as_string=FALSE){
-  values = generate_bootstrap_replicate(data, func, n)
+calculate_bootstrap_ci<-function(data, func, n=10000, as_string=FALSE, ...){
+  values = generate_bootstrap_replicate(data, func, n, ...)
   rtnVal = quantile(values, c(.025, .5,  .975))
   if (as_string){
     rtnVal = paste(formatC(rtnVal[2], big.mark=','), ' (', 
