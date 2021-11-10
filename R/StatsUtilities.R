@@ -1,18 +1,21 @@
 library(ggplot2)
 library(dplyr)
 
-bootstrap_replicate_1d<-function(data, func){
-  bs_sample = sample(data, size=length(data), replace=TRUE)
+bootstrap_replicate_1d<-function(data, func, size=NULL){
+  if (is.null(size)){
+    size = length(data)
+  }
+  bs_sample = sample(data, size=size, replace=TRUE)
   do.call(func, list(x=bs_sample))
 }
 
-generate_bootstrap_replicate<-function(data, func, n=10000){
-  replicate(n, do.call(bootstrap_replicate_1d, list(data=data, func=func)))
+generate_bootstrap_replicate<-function(data, func, n=10000, size=NULL){
+  replicate(n, do.call(bootstrap_replicate_1d, list(data=data, func=func, size=size)))
 }
 
 
-calculate_bootstrap_ci<-function(data, func, n=10000, as_string=FALSE){
-  values = generate_bootstrap_replicate(data, func, n)
+calculate_bootstrap_ci<-function(data, func, n=10000, as_string=FALSE, ...){
+  values = generate_bootstrap_replicate(data, func, n, ...)
   rtnVal = quantile(values, c(.025, .5,  .975))
   if (as_string){
     rtnVal = paste(formatC(rtnVal[2], big.mark=','), ' (', 
